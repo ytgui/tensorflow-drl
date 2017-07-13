@@ -12,9 +12,9 @@ def bias_variable(shape):
 
 
 def fc(x, n_neurons, activation=None):
-    rows, cols = tf.shape(x)
-    W = weight_variable(shape=[cols, n_neurons])
-    b = bias_variable(shape=[n_neurons])
+    rows, cols = x.shape
+    W = weight_variable([int(cols), n_neurons])
+    b = bias_variable([n_neurons])
     if activation is None:
         y = tf.matmul(x, W) + b
     else:

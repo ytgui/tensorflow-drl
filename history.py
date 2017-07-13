@@ -7,9 +7,9 @@ class ReplayBuffer:
         self._buffer = list()
 
     def insert(self, *args):
-        if len(self._buffer) > self._buffer_len:
+        if len(self._buffer) >= self._buffer_len:
             self._buffer.pop(0)
-        self._buffer.append(args)
+        self._buffer.append(*args)
 
     def get_batch(self, n_batch, n_lost):
         # forget random items
