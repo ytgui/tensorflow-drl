@@ -8,8 +8,8 @@ class AgentBase:
         self._env = None
         self._replay = None
         # epsilon greedy
-        self._epsilon = 0.2
-        self._epsilon_min = 0.2
+        self._epsilon = 0.0
+        self._epsilon_min = 0.0
         self._epsilon_max = 0.8
         # global_step
         self._global_step = 0
@@ -18,6 +18,7 @@ class AgentBase:
         pass
 
     def _epsilon_greedy(self):
+        # (0, 0) (10, 0.2) (30, 0.55) (50, 0.75) (60, 0.8)
         self._epsilon = np.tanh(0.02 * self._global_step)
         self._epsilon = np.maximum(self._epsilon, self._epsilon_min)
         self._epsilon = np.minimum(self._epsilon, self._epsilon_max)
@@ -63,12 +64,12 @@ class AgentBase:
     def _explore(self, state):
         epsilon = self._epsilon_greedy()
         if np.random.uniform() > epsilon:
-            action = self._random_action(state)
+            action = self._random_action()
         else:
             action = self._optimal_action(state)
         return action
 
-    def _random_action(self, state):
+    def _random_action(self):
         self.is_not_used()
         raise RuntimeError('function must overridden.')
 
