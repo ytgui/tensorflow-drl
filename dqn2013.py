@@ -18,10 +18,8 @@ class DQN(base.AgentBase):
     LR = 1e-3  # learning rate
     DF = 0.9
 
-    def __init__(self, double_q=False):
+    def __init__(self):
         super().__init__()
-        #
-        self._double_q = double_q
         # sub module
         self._env = enviroment.make(self.ENV_ID)
         self._replay_buffer = history.ReplayBuffer()
@@ -38,7 +36,7 @@ class DQN(base.AgentBase):
             state = tf.placeholder(dtype=tf.float32, shape=[None, self.STATE_SPACE])
         with tf.name_scope('hidden'):
             y1 = layers.fc(state, n_neurons=self.HIDDEN_NEURONS, activation=tf.nn.tanh)
-        with tf.name_scope('q_values'):
+        with tf.name_scope('q_value'):
             q_values = layers.fc(y1, n_neurons=self.ACTION_SPACE)
             action = tf.placeholder(tf.int32, [None])
             action_mask = tf.one_hot(action, depth=self.ACTION_SPACE, on_value=1.0, off_value=0.0, dtype=tf.float32)
@@ -108,11 +106,10 @@ class DQN(base.AgentBase):
             #                                  feed_dict={self._tensor['state']: state_batch,
             #                                             self._tensor['action_mask']: action_mask_batch})
             #
-            q_predict_batch = np.max(
-                self._sess.run(self._net['q_values'], feed_dict={self._net['state']: next_state_batch}),
-                axis=1)
+            q_predict_batch = self._sess.run(self._net['q_values'], feed_dict={self._net['state']: next_state_batch})
             # q_target = reward if done else reward + df * q_predict
-            q_target_batch = reward_batch + np.multiply(np.subtract(1.0, done_batch), self.DF * q_predict_batch)
+            q_target_batch = reward_batch + np.multiply(np.subtract(1.0, done_batch),
+                                                        self.DF * np.max(q_predict_batch, axis=1))
             #
             summary, _, loss = self._sess.run([self._net['merged'],
                                                self._net['train_step'],
