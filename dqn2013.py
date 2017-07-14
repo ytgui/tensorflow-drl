@@ -2,13 +2,13 @@ import time
 import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
-import agent
+import base
 import enviroment
 import history
 import layers
 
 
-class DQN(agent.AgentBase):
+class DQN(base.AgentBase):
     # Modeling
     ENV_ID = 'CartPole-v0'
     STATE_SPACE = 4
@@ -18,13 +18,15 @@ class DQN(agent.AgentBase):
     LR = 1e-3  # learning rate
     DF = 0.9
 
-    def __init__(self):
+    def __init__(self, double_q=False):
         super().__init__()
+        #
+        self._double_q = double_q
         # sub module
         self._env = enviroment.make(self.ENV_ID)
         self._replay_buffer = history.ReplayBuffer()
         # build network
-        self._sess, self._tensor = self._build_network()
+        self._sess, self._net = self._build_network()
 
     def __del__(self):
         self._sess.close()
@@ -37,10 +39,9 @@ class DQN(agent.AgentBase):
         with tf.name_scope('hidden'):
             y1 = layers.fc(state, n_neurons=self.HIDDEN_NEURONS, activation=tf.nn.tanh)
         with tf.name_scope('q_values'):
-            q_values = layers.fc(y1, n_neurons=self.ACTION_SPACE)  # one hot
-        # process q value
-        with tf.name_scope('action_mask'):
-            action_mask = tf.placeholder(tf.float32, [None, self.ACTION_SPACE])
+            q_values = layers.fc(y1, n_neurons=self.ACTION_SPACE)
+            action = tf.placeholder(tf.int32, [None])
+            action_mask = tf.one_hot(action, depth=self.ACTION_SPACE, on_value=1.0, off_value=0.0, dtype=tf.float32)
             q_current = tf.reduce_sum(tf.multiply(q_values, action_mask), axis=1)
         # loss
         with tf.name_scope('loss'):
@@ -60,7 +61,7 @@ class DQN(agent.AgentBase):
         #
         return sess, {'state': state,
                       'q_values': q_values,
-                      'action_mask': action_mask,
+                      'action': action,
                       'q_current': q_current,
                       'q_target': q_target,
                       'loss': loss,
@@ -90,7 +91,7 @@ class DQN(agent.AgentBase):
         return action
 
     def _optimal_action(self, state):
-        q_values = self._sess.run(self._tensor['q_values'], feed_dict={self._tensor['state']: [state]})
+        q_values = self._sess.run(self._net['q_values'], feed_dict={self._net['state']: [state]})
         return np.argmax(q_values)
 
     def _perceive(self, state, action, state_, reward, done):
@@ -102,23 +103,22 @@ class DQN(agent.AgentBase):
             #
             reward_batch = [-1.0 if done else reward for reward, done in zip(reward_batch, done_batch)]
             #
-            action_mask_batch = np.eye(self.ACTION_SPACE)[list(action_batch)]
+            # action_mask_batch = np.eye(self.ACTION_SPACE)[list(action_batch)]
             # q_current_batch = self._sess.run(self._tensor['q_current'],
             #                                  feed_dict={self._tensor['state']: state_batch,
             #                                             self._tensor['action_mask']: action_mask_batch})
             #
             q_predict_batch = np.max(
-                self._sess.run(self._tensor['q_values'], feed_dict={self._tensor['state']: next_state_batch}),
+                self._sess.run(self._net['q_values'], feed_dict={self._net['state']: next_state_batch}),
                 axis=1)
             # q_target = reward if done else reward + df * q_predict
-            done_batch = [not done for done in done_batch]
-            q_target_batch = reward_batch + np.multiply(done_batch, self.DF * q_predict_batch)
+            q_target_batch = reward_batch + np.multiply(np.subtract(1.0, done_batch), self.DF * q_predict_batch)
             #
-            summary, _, loss = self._sess.run([self._tensor['merged'],
-                                               self._tensor['train_step'],
-                                               self._tensor['loss']],
-                                              feed_dict={self._tensor['state']: state_batch,
-                                                         self._tensor['action_mask']: action_mask_batch,
-                                                         self._tensor['q_target']: q_target_batch})
-            self._tensor['train_writer'].add_summary(summary,
-                                                     tf.train.global_step(self._sess, self._tensor['global_step']))
+            summary, _, loss = self._sess.run([self._net['merged'],
+                                               self._net['train_step'],
+                                               self._net['loss']],
+                                              feed_dict={self._net['state']: state_batch,
+                                                         self._net['action']: action_batch,
+                                                         self._net['q_target']: q_target_batch})
+            self._net['train_writer'].add_summary(summary,
+                                                  tf.train.global_step(self._sess, self._net['global_step']))
