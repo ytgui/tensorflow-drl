@@ -48,7 +48,7 @@ class DQN(base.AgentBase):
         # train
         with tf.name_scope('train'):
             global_step = tf.Variable(0, trainable=False, name='global_step')
-            train_step = tf.train.AdamOptimizer().minimize(loss)
+            train_step = tf.train.AdamOptimizer().minimize(loss, global_step=global_step)
         # tensor board
         merged = tf.summary.merge_all()
         train_writer = tf.summary.FileWriter('/tmp/tensorflow-drl/dqn/train', self._sess.graph)
@@ -69,13 +69,12 @@ class DQN(base.AgentBase):
                 'test_writer': test_writer}
 
     def train(self, episodes=500, max_step=200):
-        # prepare for epsilon greedy
-        # train step
         for episode in tqdm(range(episodes)):
             if episode % 50 == 0:
                 total_reward = self._test_impl(max_step, delay=0, gui=False)
                 tqdm.write('current reward: {total_reward}'.format(total_reward=total_reward))
             else:
+                # train step
                 self._train_impl(max_step)
 
     def test(self, episodes=1, max_step=200, delay=0.1, gui=True):

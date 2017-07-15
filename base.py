@@ -12,6 +12,7 @@ class AgentBase:
         self._epsilon_min = 0.0
         self._epsilon_max = 0.8
         # global_step
+        self._global_episode = 0
         self._global_step = 0
 
     def is_not_used(self):
@@ -19,17 +20,18 @@ class AgentBase:
 
     def _epsilon_greedy(self):
         # (0, 0) (10, 0.2) (30, 0.55) (50, 0.75) (60, 0.8)
-        self._epsilon = np.tanh(0.02 * self._global_step)
+        self._epsilon = np.tanh(0.02 * self._global_episode)
         self._epsilon = np.maximum(self._epsilon, self._epsilon_min)
         self._epsilon = np.minimum(self._epsilon, self._epsilon_max)
         return self._epsilon
 
     def _train_impl(self, max_step):
         # prepare for epsilon greedy
-        self._global_step += 1
+        self._global_episode += 1
         # train
         state = self._env.reset()
         for step in range(max_step):
+            self._global_step += 1
             # 1. predict
             action = self._explore(state)
             # 2. action

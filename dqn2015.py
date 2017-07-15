@@ -26,6 +26,8 @@ class DQN(base.AgentBase):
         # build network
         self._sess = tf.Session()
         self._net, self._target_net = self._build_network()
+        # update target network
+        self._epsilon_to_update = 5
 
     def __del__(self):
         self._sess.close()
@@ -52,7 +54,7 @@ class DQN(base.AgentBase):
                                                                                         n_neurons=self.ACTION_SPACE)
             with tf.name_scope('update'):
                 update_ops = []
-                for name, _ in weights:
+                for name in weights:
                     update_ops.append(tf.assign(target_weights[name], weights[name]))
         # loss
         with tf.name_scope('loss'):
@@ -65,7 +67,7 @@ class DQN(base.AgentBase):
         # train
         with tf.name_scope('train'):
             global_step = tf.Variable(0, trainable=False, name='global_step')
-            train_step = tf.train.AdamOptimizer().minimize(loss)
+            train_step = tf.train.AdamOptimizer().minimize(loss, global_step=global_step)
         # tensor board
         merged = tf.summary.merge_all()
         train_writer = tf.summary.FileWriter('/tmp/tensorflow-drl/dqn/train', self._sess.graph)
@@ -88,13 +90,15 @@ class DQN(base.AgentBase):
                                               'update_ops': update_ops}
 
     def train(self, episodes=500, max_step=200):
-        # prepare for epsilon greedy
-        # train step
         for episode in tqdm(range(episodes)):
+            if episode % self._epsilon_to_update == 0:
+                self._update_target_network()
+            #
             if episode % 50 == 0:
                 total_reward = self._test_impl(max_step, delay=0, gui=False)
                 tqdm.write('current reward: {total_reward}'.format(total_reward=total_reward))
             else:
+                # train step
                 self._train_impl(max_step)
 
     def test(self, episodes=1, max_step=200, delay=0.1, gui=True):
@@ -102,17 +106,16 @@ class DQN(base.AgentBase):
             total_reward = self._test_impl(max_step, delay, gui)
             print('current reward: {total_reward}'.format(total_reward=total_reward))
 
+    def _update_target_network(self):
+        self._sess.run(self._target_net['update_ops'])
+
     def _random_action(self):
         action = self._env.action_space.sample()
         return action
 
     def _optimal_action(self, state):
-        # use net or target_net ??
         q_values = self._sess.run(self._net['q_values'], feed_dict={self._net['state']: [state]})
         return np.argmax(q_values)
-
-    def _is_time_to_update_target_net(self):
-        pass
 
     def _perceive(self, state, action, state_, reward, done):
         # DQN2013: y_i^DQN  = r + gamma * max_a' Q(next_state, a')
@@ -126,14 +129,9 @@ class DQN(base.AgentBase):
             #
             reward_batch = [-1.0 if done else reward for reward, done in zip(reward_batch, done_batch)]
             #
-            # action_mask_batch = np.eye(self.ACTION_SPACE)[list(action_batch)]
-            # q_current_batch = self._sess.run(self._tensor['q_current'],
-            #                                  feed_dict={self._tensor['state']: state_batch,
-            #                                             self._tensor['action_mask']: action_mask_batch})
-            #
             q_predict_batch = self._sess.run(self._target_net['q_values'],
                                              feed_dict={self._target_net['state']: next_state_batch})
-            # q_target = reward if done else reward + df * q_predict
+            #
             q_target_batch = reward_batch + np.multiply(np.subtract(1.0, done_batch),
                                                         self.DF * np.max(q_predict_batch, axis=1))
             #
@@ -145,6 +143,4 @@ class DQN(base.AgentBase):
                                                          self._net['q_target']: q_target_batch})
             self._net['train_writer'].add_summary(summary,
                                                   tf.train.global_step(self._sess, self._net['global_step']))
-            #
-            if self._is_time_to_update_target_net():
-                self._sess.run(self._target_net['update_ops'])
+
