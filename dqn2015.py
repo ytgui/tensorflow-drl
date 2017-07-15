@@ -31,13 +31,10 @@ class DQN(base.AgentBase):
         self._sess.close()
 
     def _build_network(self):
-        # DQN2013: y_i^DQN  = r + gamma * max_a' Q(next_state, a')
-        # DQN2015: y_i^DQN  = r + gamma * max_a' Q_Target(next_state, a')
-        # DoubleDQN: y_i^DDQN = r + gamma * Q_Target(next_state, argmax_a' Q(next_state, a') )
-        weights = {}
-        target_weights = {}
         # target_xxx means tensors in target Q net, for example: tf.assign(target_w, w)
         # xxx_target means training value, for example: loss = q_target - q_current
+        weights = {}
+        target_weights = {}
         with tf.name_scope('input'):
             state = tf.placeholder(dtype=tf.float32, shape=[None, self.STATE_SPACE])
         with tf.name_scope('Q_Net'):
@@ -110,5 +107,44 @@ class DQN(base.AgentBase):
         return action
 
     def _optimal_action(self, state):
+        # use net or target_net ??
         q_values = self._sess.run(self._net['q_values'], feed_dict={self._net['state']: [state]})
         return np.argmax(q_values)
+
+    def _is_time_to_update_target_net(self):
+        pass
+
+    def _perceive(self, state, action, state_, reward, done):
+        # DQN2013: y_i^DQN  = r + gamma * max_a' Q(next_state, a')
+        # DQN2015: y_i^DQN  = r + gamma * max_a' Q_Target(next_state, a')
+        # DoubleDQN: y_i^DDQN = r + gamma * Q_Target(next_state, argmax_a' Q(next_state, a') )
+        self._replay_buffer.insert([state, action, state_, reward, done])
+        if self._replay_buffer.is_full():
+            #
+            state_batch, action_batch, next_state_batch, reward_batch, done_batch = \
+                self._replay_buffer.get_batch(n_batch=128, n_lost=8)
+            #
+            reward_batch = [-1.0 if done else reward for reward, done in zip(reward_batch, done_batch)]
+            #
+            # action_mask_batch = np.eye(self.ACTION_SPACE)[list(action_batch)]
+            # q_current_batch = self._sess.run(self._tensor['q_current'],
+            #                                  feed_dict={self._tensor['state']: state_batch,
+            #                                             self._tensor['action_mask']: action_mask_batch})
+            #
+            q_predict_batch = self._sess.run(self._target_net['q_values'],
+                                             feed_dict={self._target_net['state']: next_state_batch})
+            # q_target = reward if done else reward + df * q_predict
+            q_target_batch = reward_batch + np.multiply(np.subtract(1.0, done_batch),
+                                                        self.DF * np.max(q_predict_batch, axis=1))
+            #
+            summary, _, loss = self._sess.run([self._net['merged'],
+                                               self._net['train_step'],
+                                               self._net['loss']],
+                                              feed_dict={self._net['state']: state_batch,
+                                                         self._net['action']: action_batch,
+                                                         self._net['q_target']: q_target_batch})
+            self._net['train_writer'].add_summary(summary,
+                                                  tf.train.global_step(self._sess, self._net['global_step']))
+            #
+            if self._is_time_to_update_target_net():
+                self._sess.run(self._target_net['update_ops'])
