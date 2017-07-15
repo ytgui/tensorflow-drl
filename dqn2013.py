@@ -24,25 +24,24 @@ class DQN(base.AgentBase):
         self._env = enviroment.make(self.ENV_ID)
         self._replay_buffer = history.ReplayBuffer()
         # build network
-        self._sess, self._net = self._build_network()
+        self._sess = tf.Session()
+        self._net = self._build_network()
 
     def __del__(self):
         self._sess.close()
 
     def _build_network(self):
-        sess = tf.Session()
-        # neural network
         with tf.name_scope('input'):
             state = tf.placeholder(dtype=tf.float32, shape=[None, self.STATE_SPACE])
         with tf.name_scope('hidden'):
-            y1 = layers.fc(state, n_neurons=self.HIDDEN_NEURONS, activation=tf.nn.tanh)
+            y1, _, _ = layers.fc(state, n_neurons=self.HIDDEN_NEURONS, activation=tf.nn.tanh)
         with tf.name_scope('q_value'):
-            q_values = layers.fc(y1, n_neurons=self.ACTION_SPACE)
+            q_values, _, _ = layers.fc(y1, n_neurons=self.ACTION_SPACE)
+        # loss
+        with tf.name_scope('loss'):
             action = tf.placeholder(tf.int32, [None])
             action_mask = tf.one_hot(action, depth=self.ACTION_SPACE, on_value=1.0, off_value=0.0, dtype=tf.float32)
             q_current = tf.reduce_sum(tf.multiply(q_values, action_mask), axis=1)
-        # loss
-        with tf.name_scope('loss'):
             q_target = tf.placeholder(tf.float32, [None])
             loss = tf.reduce_mean(tf.squared_difference(q_current, q_target))
             tf.summary.scalar('loss', loss)
@@ -52,22 +51,22 @@ class DQN(base.AgentBase):
             train_step = tf.train.AdamOptimizer().minimize(loss)
         # tensor board
         merged = tf.summary.merge_all()
-        train_writer = tf.summary.FileWriter('/tmp/tensorflow-drl/dqn/train', sess.graph)
+        train_writer = tf.summary.FileWriter('/tmp/tensorflow-drl/dqn/train', self._sess.graph)
         test_writer = tf.summary.FileWriter('/tmp/tensorflow-drl/dqn/test')
         #
-        sess.run(tf.global_variables_initializer())
+        self._sess.run(tf.global_variables_initializer())
         #
-        return sess, {'state': state,
-                      'q_values': q_values,
-                      'action': action,
-                      'q_current': q_current,
-                      'q_target': q_target,
-                      'loss': loss,
-                      'train_step': train_step,
-                      'global_step': global_step,
-                      'merged': merged,
-                      'train_writer': train_writer,
-                      'test_writer': test_writer}
+        return {'state': state,
+                'q_values': q_values,
+                'action': action,
+                'q_current': q_current,
+                'q_target': q_target,
+                'loss': loss,
+                'train_step': train_step,
+                'global_step': global_step,
+                'merged': merged,
+                'train_writer': train_writer,
+                'test_writer': test_writer}
 
     def train(self, episodes=500, max_step=200):
         # prepare for epsilon greedy

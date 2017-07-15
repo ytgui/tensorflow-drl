@@ -19,4 +19,4 @@ def fc(x, n_neurons, activation=None):
         y = tf.matmul(x, W) + b
     else:
         y = activation(tf.matmul(x, W) + b)
-    return y
+    return y, W, b
