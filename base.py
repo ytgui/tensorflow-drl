@@ -73,12 +73,12 @@ class AgentBase:
 
     def _random_action(self):
         self.is_not_used()
-        raise RuntimeError('function must overridden.')
+        raise NotImplementedError('function must overridden.')
 
     def _optimal_action(self, state):
         self.is_not_used()
-        raise RuntimeError('function must overridden.')
+        raise NotImplementedError('function must overridden.')
 
     def _perceive(self, state, action, state_, reward, done):
         self.is_not_used()
-        raise RuntimeError('function must overridden.')
+        raise NotImplementedError('function must overridden.')
